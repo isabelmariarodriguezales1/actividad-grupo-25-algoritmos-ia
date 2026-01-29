@@ -6,7 +6,7 @@ library(factoextra)
 
 # CARGA DE LOS ARCHIVOS
 
-setwd("C:/Users/julia/Desktop/BIOINF MASTER/Algoritmos e Inteligencia Artifical/actividad 3/")
+#setwd("C:/Users/julia/Desktop/BIOINF MASTER/Algoritmos e Inteligencia Artifical/actividad 3/")
 
 gene_expression <- read.table("gene_expression.csv",
                               sep = ";",

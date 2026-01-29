@@ -6,7 +6,7 @@ library(factoextra)
 
 # CARGA DE LOS ARCHIVOS
 
-setwd("C:/Users/socla/MASTER/algoritmos e IA/ACT3 grupal/")
+#setwd("C:/Users/socla/MASTER/algoritmos e IA/ACT3 grupal/")
 ##carga de datos de expresion genetica
 gene_expression <- read.table("gene_expression.csv",
                               sep = ";",

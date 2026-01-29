@@ -1,0 +1,602 @@
+---
+title: "ACTIVIDAD GRUPAL (ALGORITMOS E INTELIGENCIA ARTIFICIAL) - GRUPO 25"
+author: "Isabel María Rodríguez Alés, Julián Soriano Valero, Jaime Hernán Gil, Irene Salas Ibáñez y Júlia Francisco Rodon"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+    highlight: tango
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+setwd("~/Desktop/GENÉTICA/(iii) MÁSTER BIOINFORMÁTICA/(i) PRIMER SEMESTRE/ALGORITMOS E INTELIGENCIA ARTIFICIAL/ACTIVIDADES/Actividad Grupal")
+```
+
+# INTRODUCCIÓN
+
+xxx
+
+```{r PROCESADO, include=TRUE}
+set.seed(123)
+
+library(tidyverse)
+library(caret)
+library(factoextra)
+
+
+gene_expression <- read.table("gene_expression.csv",
+                              sep = ";",
+                              header = FALSE)
+
+##carga de nombres de genes
+column_names <- read.table("column_names.txt",
+                           header = FALSE,
+                           stringsAsFactors = FALSE)
+##cargar las clases
+classes <- read.table("classes.csv",
+                      sep = ";",
+                      header = FALSE,
+                      stringsAsFactors = FALSE)
+colnames(classes) <- c("SampleID", "Class")
+
+
+#CONSTRUIR EL DATAFRAME FINAL
+
+##Asignar nombres de genes como nombres de columnas
+colnames(gene_expression) <- column_names$V1
+##Asignar IDs de muestra como nombres de filas
+rownames(gene_expression) <- classes$SampleID
+##Añadir la clase como última columna
+data <- gene_expression %>%
+  mutate(Class = as.factor(classes[,2]))
+
+
+#DEPURADO DE DATOS
+##calcular la proporcion de NA por gen
+na_prop <- colMeans(is.na(data))
+##eliminar genes con mas del 20% de NA
+data <- data[, na_prop < 0.2] #(no se elimina ningun gen)
+
+#IMPUTACION DE VALORES NA
+##No haria falta ya que no hay ningun NA, pero en un caso real cabria hacerlo
+###Aqui se estima un valor razonable para los NA usando la informacion disponible
+###Se realiza con KNN (k-nearest neighbors)
+##separar datos y clase ya que nunca imputamos la clase, solo los datos
+x <- data[, colnames(data) != "Class"]
+y <- data$Class
+
+#NORMALIZACION
+##centrar y escalar
+preproc_scale <- preProcess(x, method = c("center", "scale"))
+x_scaled <- predict(preproc_scale, x)
+
+
+##dataset final
+data_final <- x_scaled
+data_final$Class <- y
+
+
+# -------------
+
+# Variables con desviación estandar 0
+# Columnas con SD = 0 que indican que son constantes
+
+desviaciones <- apply(x_scaled, 2, sd) # La función apply con margen 2 calcula la SD por columna.
+
+
+columnas_a_mantener <- desviaciones > 0 # se mantienen las columnas que su desviación estándar es > 0
+x_scaled_sd <- x_scaled # se crea una copia para no modificar el original
+data.filtrada2 <- x_scaled_sd[, columnas_a_mantener]
+
+genes_eliminados <- sum(!columnas_a_mantener)
+nombres_genes_eliminados <- colnames(x_scaled_sd)[!columnas_a_mantener]
+
+cat("Genes (columnas) eliminados (SD = 0):", genes_eliminados, "\n")
+cat("Genes:",paste(nombres_genes_eliminados, collapse = ", "), "\n")
+
+
+# filtro sobre el dataset original para quedarte solo con los genes útiles
+x_filtrado_sd <- x[, columnas_a_mantener]
+
+#  escalado y centrado sobre el dataset filtrado
+preproc_scale_sd <- preProcess(x_filtrado_sd, method = c("center", "scale"))
+X_scaled_sd <- predict(preproc_scale_sd, x_filtrado_sd)
+```
+
+# MÉTODOS NO SUPERVISADOS
+## PCA
+xxx
+
+```{r PCA, include=TRUE}
+# Columnas con SD = 0 que indican que son constantes
+
+desviaciones <- apply(X_scaled_sd, 2, sd) # La función apply con margen 2 calcula la SD por columna.
+
+
+columnas_a_mantener <- desviaciones > 0 # se mantienen las columnas que su desviación estándar es > 0
+data.filtrada2 <- X_scaled_sd[, columnas_a_mantener]
+
+genes_eliminados <- sum(!columnas_a_mantener)
+nombres_genes_eliminados <- colnames(X_scaled_sd)[!columnas_a_mantener]
+
+
+
+cat("Genes (columnas) eliminados (SD = 0):", genes_eliminados, "\n")
+cat("Genes:",paste(nombres_genes_eliminados, collapse = ", "), "\n")
+
+# filtro sobre el dataset original para quedarte solo con los genes útiles
+x_filtrado <- x[, columnas_a_mantener]
+
+#  escalado y centrado sobre el dataset filtrado
+preproc_scale <- preProcess(x_filtrado, method = c("center", "scale"))
+X_scaled_sd <- predict(preproc_scale, x_filtrado)
+
+# Cálculo de componentes principales (usamos los datos ya escalados)
+pca.results <- prcomp(X_scaled_sd, center = FALSE, scale. = FALSE)
+
+# Resultado de las componentes principales en un dataframe
+pca.df <- data.frame(pca.results$x)
+
+# Análisis de la Varianza
+varianzas <- pca.results$sdev^2
+total.varianza <- sum(varianzas)
+varianza.explicada <- varianzas / total.varianza
+varianza.acumulada <- cumsum(varianza.explicada)
+
+# Número de componentes que explican el 70%
+n.pc <- min(which(varianza.acumulada > 0.70))
+print(paste("Número de PCs para el 70% de varianza:", n.pc))
+
+# Configuración de etiquetas dinámicas para los ejes
+x_label <- paste0("PC1 (", round(varianza.explicada[1] * 100, 2), "%)")
+y_label <- paste0("PC2 (", round(varianza.explicada[2] * 100, 2), "%)")
+
+# Representación gráfica
+# Usamos 'y' que definimos antes como el factor de las clases
+ggplot(pca.df, aes(x = PC1, y = PC2, color = y)) + 
+  geom_point(size = 3, alpha = 0.8) +
+  scale_color_manual(values = c('red', 'blue', 'green', 'orange', 'purple')) +
+  labs(title = 'PCA', 
+      
+       x = x_label, 
+       y = y_label, 
+       color = 'Grupo') +
+  theme_classic() +
+  theme(
+    panel.grid.major = element_line(color = "gray90"), 
+    panel.grid.minor = element_blank(),
+    panel.background = element_rect(fill = "gray95"), 
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    plot.subtitle = element_text(hjust = 0.5)
+  )
+
+library(plotly)
+
+# Definir la etiqueta del tercer eje (PC3)
+z_label <- paste0('PC3 (', round(varianza.explicada[3]*100, 2), '%)')
+
+#  Generar el gráfico interactivo 3D
+plot_ly(pca.df, 
+        x = ~PC1, 
+        y = ~PC2, 
+        z = ~PC3, 
+        color = ~y,  # Usamos 'y' que contiene tus etiquetas de Class
+        colors = c('red', 'blue', 'green', 'orange', 'purple'),
+        type = 'scatter3d', 
+        mode = 'markers',
+        marker = list(size = 4, opacity = 0.8)) %>%
+  layout(title = 'PCA 3D - Types of Cancer',
+         scene = list(xaxis = list(title = x_label),
+                      yaxis = list(title = y_label),
+                      zaxis = list(title = z_label)))
+```
+
+## UMAP
+xxx
+```{r UMAP, include=TRUE}
+# Cargar librerías adicionales necesarias
+library(uwot)
+library(ggplot2)
+
+# Separar datos y etiquetas para UMAP
+x_umap <- data_final[, colnames(data_final) != "Class"]
+labels_umap <- data_final$Class
+
+# Aplicar UMAP con parámetros ajustados
+# n_neighbors: número de vecinos cercanos (20% del total de muestras)
+# n_components: dimensiones de salida (2 para visualización)
+# min_dist: distancia mínima entre puntos
+umap_results <- umap(x_umap, 
+                     n_neighbors = 0.2 * nrow(x_umap),
+                     n_components = 2, 
+                     min_dist = 0.1, 
+                     local_connectivity = 1,
+                     ret_model = TRUE, 
+                     verbose = TRUE)
+
+# Crear dataframe con resultados de UMAP
+umap_df <- data.frame(umap_results$embedding)
+colnames(umap_df) <- c("UMAP1", "UMAP2")
+
+# Añadir las etiquetas para el gráfico
+umap_df$Class <- labels_umap
+
+# Visualizar resultados UMAP
+ggplot(umap_df, aes(x = UMAP1, y = UMAP2, color = Class)) +
+  geom_point(size = 3) +
+  labs(title = "UMAP - Expresión Genética", 
+       x = "UMAP1", 
+       y = "UMAP2", 
+       color = "Tipo") +
+  theme_classic() +
+  theme(panel.grid.major = element_line(color = "gray90"), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_rect(fill = "gray95"), 
+        plot.title = element_text(hjust = 0.5))
+```
+
+## CLUSTERIZACIÓN
+# kmeans
+```{r k-means_n}
+library(factoextra)
+# n optimo de clusters
+fviz_nbclust(X_scaled_sd, kmeans, method = "wss") +
+  ggtitle("Optimal number of clusters", subtitle = "") +
+  theme_classic()
+
+### A partir de $k = 4$, la curva se vuelve mucho más plana (lineal), lo que sugiere que añadir más grupos no está reduciendo la varianza interna de forma significativa.
+
+
+### k-means 2D
+# 1. Ejecutar K-means sobre los datos ESCALADOS
+# Usamos k=5 como indicaste en tu ejemplo
+set.seed(123) # Para que el resultado sea reproducible
+kmeans.result <- kmeans(X_scaled_sd, 
+                        centers = 4, 
+                        iter.max = 100, 
+                        nstart = 25)
+
+# 2. Visualización con fviz_cluster
+# Esta función hace un PCA interno para poder mostrar los datos en 2D
+fviz_cluster(kmeans.result, 
+             data = X_scaled_sd, 
+             geom = "point",
+             palette = c("#E41A1C", "#377EB8", "#4DAF4A", "#FF7F00"), 
+             ellipse.type = "convex", # Encierra los grupos en polígonos
+             ggtheme = theme_minimal(),
+             main = "Clustering K-means (k=4)")
+
+### K-means sobre PCA
+
+fviz_nbclust(pca.df[,1:3], kmeans, method = "wss") +
+  ggtitle("Optimal number of clusters", subtitle = "") +
+  theme_classic()
+
+
+### Similar al anterior, se seleccionan 4 componentes.
+# 1. Ejecutar K-means sobre las primeras 3 dimensiones del PCA
+# Esto agrupa las muestras según su posición en el espacio 3D que acabas de visualizar
+
+kmeans.pca <- kmeans(pca.df[, 1:3], 
+                     centers = 4, 
+                     nstart = 100, 
+                     iter.max = 300)
+
+
+# 2. Visualización 2D (Proyección de los clusters)
+fviz_cluster(kmeans.pca, 
+             data = pca.df[, 1:3], 
+             geom = "point", 
+             palette = c("red", "blue", "green", "orange"),
+             ellipse.type = "convex",
+             ggtheme = theme_minimal(),
+             main = "K-means Clustering sobre PC1-PC3")
+
+# 3. Preparar los clusters para el gráfico 3D
+clusters <- kmeans.pca$cluster
+
+# 4. Visualización 3D Interactiva
+plot_ly(
+  x = pca.df[, 1],
+  y = pca.df[, 2],
+  z = pca.df[, 3],
+  color = as.factor(clusters),
+  colors = c("red", "blue", "green", "orange"),
+  type = "scatter3d",
+  mode = "markers",
+  marker = list(size = 4, opacity = 0.8)
+) %>%
+  layout(
+    title = 'Clusters K-means en Espacio PCA (3D)',
+    scene = list(
+      xaxis = list(title = 'PC1'),
+      yaxis = list(title = 'PC2'),
+      zaxis = list(title = 'PC3')
+    )
+  )
+```
+
+## HEATMAP
+```{r HEATMAP}
+# Variables con desviación estandar 0
+# Columnas con SD = 0 que indican que son constantes
+
+desviaciones <- apply(x_scaled, 2, sd) # La función apply con margen 2 calcula la SD por columna.
+
+columnas_a_mantener <- desviaciones > 0 # se mantienen las columnas que su desviación estándar es > 0
+x_scaled_sd <- x_scaled # se crea una copia para no modificar el original
+data.filtrada2 <- x_scaled_sd[, columnas_a_mantener]
+
+genes_eliminados <- sum(!columnas_a_mantener)
+nombres_genes_eliminados <- colnames(x_scaled_sd)[!columnas_a_mantener]
+
+
+
+cat("Genes (columnas) eliminados (SD = 0):", genes_eliminados, "\n")
+cat("Genes:",paste(nombres_genes_eliminados, collapse = ", "), "\n")
+
+
+# filtro sobre el dataset original para quedarte solo con los genes útiles
+x_filtrado_sd <- x[, columnas_a_mantener]
+
+#  escalado y centrado sobre el dataset filtrado
+preproc_scale_sd <- preProcess(x_filtrado_sd, method = c("center", "scale"))
+X_scaled_sd <- predict(preproc_scale_sd, x_filtrado_sd)
+
+
+
+#===============================
+# CLUSTERIZACIÓN JERÁRQUICA AGLOMERATIVA: HEATMAP
+#===============================
+
+library(pheatmap)
+library(RColorBrewer)
+
+# Calcular varianza de cada gen
+varianzas <- apply(x_filtrado_sd, 2, var)
+
+# Seleccionar top genes más representativos
+
+# Calculamos un ANOVA para cada gen respecto a la Clase
+p_values_anova <- apply(x_filtrado_sd, 2, function(gen) {
+  res_anova <- aov(gen ~ y)
+  summary(res_anova)[[1]][["Pr(>F)"]][1]
+})
+
+# Elegimos los 20 genes con el p-valor más bajo (los más significativos)
+top_genes_anova <- names(sort(p_values_anova))[1:20]
+matriz_anova <- x_filtrado_sd[, top_genes_anova]
+
+
+# Preparar anotaciones para mostrar las clases reales
+annotation_col <- data.frame(
+  Clase = y
+)
+
+rownames(annotation_col) <- rownames(matriz_anova)
+
+# Colores para las clases
+ann_colors <- list(
+  Clase = setNames(
+    brewer.pal(length(unique(y)), "Set1"),
+    unique(y)
+  )
+)
+
+
+# Heatmap con clustering jerárquico (método Ward)
+pheatmap(t(matriz_anova),  # Transponer: genes en filas, muestras en columnas
+         scale = "none",
+         clustering_method = "ward.D",
+         clustering_distance_rows = "euclidean",
+         clustering_distance_cols = "euclidean",
+         annotation_col = annotation_col,
+         annotation_colors = ann_colors,
+         show_rownames = TRUE,
+         show_colnames = FALSE,
+         main = "Clustering Jerárquico Aglomerativo - Método Ward",
+         fontsize = 10,
+         border_color = NA)
+```
+
+# MÉTODOS SUPERVISADOS
+## KNN
+```{r KNN}
+# Variables con desviación estandar 0
+# Columnas con SD = 0 que indican que son constantes
+
+desviaciones <- apply(x_scaled, 2, sd) # La función apply con margen 2 calcula la SD por columna.
+
+
+columnas_a_mantener <- desviaciones > 0 # se mantienen las columnas que su desviación estándar es > 0
+x_scaled_sd <- x_scaled # se crea una copia para no modificar el original
+data.filtrada2 <- x_scaled_sd[, columnas_a_mantener]
+
+genes_eliminados <- sum(!columnas_a_mantener)
+nombres_genes_eliminados <- colnames(x_scaled_sd)[!columnas_a_mantener]
+
+
+
+cat("Genes (columnas) eliminados (SD = 0):", genes_eliminados, "\n")
+cat("Genes:",paste(nombres_genes_eliminados, collapse = ", "), "\n")
+
+
+# filtro sobre el dataset original para quedarte solo con los genes útiles
+x_filtrado_sd <- x[, columnas_a_mantener]
+
+#  escalado y centrado sobre el dataset filtrado
+preproc_scale_sd <- preProcess(x_filtrado_sd, method = c("center", "scale"))
+X_scaled_sd <- predict(preproc_scale_sd, x_filtrado_sd)
+
+#IMPLEMENTACION DE KNN
+
+# Se construye el dataset final para KNN:
+# - Variables predictoras: genes escalados y filtrados (X_scaled_sd)
+# - Variable respuesta: Class
+
+data_knn <- as.data.frame(X_scaled_sd)
+data_knn$Class <- y
+
+
+# -------------------------------
+# División en entrenamiento y test
+# -------------------------------
+
+set.seed(123)
+
+# Se mantiene la proporción de clases
+train_index <- createDataPartition(data_knn$Class,
+                                   p = 0.8,
+                                   list = FALSE)
+
+train_data <- data_knn[train_index, ]
+test_data  <- data_knn[-train_index, ]
+
+
+# -------------------------------
+# Entrenamiento del modelo KNN
+# -------------------------------
+
+# Se utiliza validación cruzada (10-fold CV)
+# para seleccionar el valor óptimo de k
+
+control <- trainControl(
+  method = "cv",
+  number = 10
+)
+
+# Se prueban distintos valores de k (solo impares)
+grid_k <- expand.grid(
+  k = seq(3, 21, by = 2)
+)
+
+set.seed(123)
+
+knn_model <- train(
+  Class ~ .,
+  data = train_data,
+  method = "knn",
+  trControl = control,
+  tuneGrid = grid_k
+)
+
+# Mostrar el mejor valor de k
+knn_model
+
+#El mejor valor de K que se ha obtenido ha sido o bien k = 9, k = 11, k = 13, pero caret elige 13 (primer máximo estable)
+
+# -------------------------------
+# Evaluación del modelo
+# -------------------------------
+
+# Predicciones sobre el conjunto de test
+pred_knn <- predict(knn_model, newdata = test_data)
+
+# Matriz de confusión y métricas de evaluación
+cm <- confusionMatrix(pred_knn, test_data$Class)
+cm
+
+cm_df <- as.data.frame(cm$table)
+
+library(ggplot2)
+
+ggplot(cm_df, aes(x = Reference, y = Prediction, fill = Freq)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = Freq), size = 5) +
+  scale_fill_gradient(low = "white", high = "steelblue") +
+  labs(title = "Matriz de confusión del clasificador KNN",
+       x = "Clase real",
+       y = "Clase predicha") +
+  theme_minimal()
+```
+
+## RANDOM FOREST
+```{r RF}
+#APRENDIZAJE NO SUPERVISADO RANDOM FOREST
+library(randomForest)
+
+##division de datos (0.7 train y 0.3 test)
+trainIndex <- createDataPartition(data_final$Class, p = 0.7, lis = FALSE)
+train_data <- data_final[trainIndex, ]
+test_data <- data_final[-trainIndex, ]
+
+cat("Dimension de train_data:", dim(train_data), "\n")
+cat("Dimension de test_data:", dim(test_data), "\n")
+cat("Dimension de clases en train:\n")
+print(table(train_data$Class))
+cat("\nDistribucion de clases en test:\n")
+print(table(test_data$Class))
+
+#ENTRENAMIENTO DEL MODELO
+##entrenar Random Forest con validacion cruzada
+rf_model <- train(
+  Class ~ .,
+  data = train_data,
+  method = "rf",
+  trControl = trainControl(
+    method = "cv", #validacion cruzada
+    number = 5, #5 folds
+    savePredictions = TRUE,
+    classProbs = TRUE #para calcular curvas ROC
+  ),
+  ntree = 75, #numero de arboles
+  importance = TRUE #calcular importancia de variables
+)
+
+print(rf_model)
+cat("\nMejor valor de mtry:", rf_model$bestTune$mtry, "\n")
+
+#PREDICCIONES
+##predicciones en test_data
+predictions <- predict(rf_model, test_data)
+predictions
+predictions_prob <- predict(rf_model, test_data, type = "prob")
+predictions_prob
+
+#METRICAS DE EVALUACION
+##matriz de confusion
+conf_matrix <- confusionMatrix(predictions, test_data$Class)
+print(conf_matrix)
+
+##extraer metricas clave
+cat("Accuracy:", round(conf_matrix$overall['Accuracy'], 4), "\n")
+cat("\nMétricas por clase:\n")
+print(conf_matrix$byClass[, c('Sensitivity', 'Specificity', 'Precision', 'F1')])
+
+#metricas promedio
+cat("\nMétricas promedio (macro):\n")
+cat("Sensitivity promedio:", round(mean(conf_matrix$byClass[,'Sensitivity'], na.rm=TRUE), 4), "\n")
+cat("Specificity promedio:", round(mean(conf_matrix$byClass[,'Specificity'], na.rm=TRUE), 4), "\n")
+cat("F1-Score promedio:", round(mean(conf_matrix$byClass[,'F1'], na.rm=TRUE), 4), "\n")
+
+#IMPORTANCIA DE VARIABLES (GENES)
+importance <- varImp(rf_model, scale = FALSE)
+cat("\nTop 20 genes mas importances:\n")
+print(head(importance$importance, 20))
+
+##visualizacion de importancia
+pdf("random_forest_importance.pdf", width = 10, height = 8)
+plot(importance, top = 20, main = "Top 20 genes mas importances")
+dev.off()
+cat("\nGrafico guardado en: random_forest_importance.pdf\n")
+
+
+#ANALISIS DE ERRORES
+##Identificar muestras mal clasificadas
+errors <- which(predictions != test_data$Class)
+cat("Numero de muestras mal clasificadas:", length(errors), "\n")
+cat("Porcentaje de error:", round(length(errors)/nrow(test_data)*100, 2), "%\n")
+
+if(length(errors) > 0 && length(errors) <= 10) {
+  cat("\nMuestras mal clasificadas:\n")
+  error_df <- data.frame(
+    Muestra = rownames(test_data)[errors],
+    Clase_Real = test_data$Class[errors],
+    Prediccion = predictions[errors]
+  )
+  print(error_df)
+}
+```

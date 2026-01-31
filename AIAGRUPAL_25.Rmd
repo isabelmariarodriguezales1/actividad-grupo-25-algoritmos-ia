@@ -735,13 +735,29 @@ if(length(errors) > 0 && length(errors) <= 10) {
 ## 6.1 Procesamiento de los datos
 
 ### 6.1.1 ¿Qué método habéis escogido para llevar a cabo la imputación de los datos?
+En el flujo de preprocesamiento se evaluó primero la presencia de valores perdidos (NA) por gen. Tras aplicar el filtrado por proporción de NA (umbral < 20%), se comprobó que en el conjunto de datos final no existían valores NA, por lo que no fue necesaria una imputación efectiva para continuar con los análisis.
 
+Aun así, se consideró como método idóneo para un caso real la imputación mediante KNN (K-Nearest Neighbors), ya que en datos de expresión génica resulta ventajoso imputar utilizando la similitud multivariante entre muestras. Este enfoque preserva mejor las correlaciones y patrones de coexpresión que métodos más simples como media/mediana, que podrían distorsionar la estructura biológica del dataset.
 ### 6.1.2 ¿Habéis llevado a cabo algún otro tipo de procesamiento?
+Sí. Se implementaron varios pasos adicionales importantes para mejorar la calidad del dataset y optimizar el rendimiento de los algoritmos:
 
+Filtrado de muestras con exceso de ceros: se eliminaron muestras con más del 95% de genes con valor 0, ya que este patrón suele asociarse a baja calidad técnica o perfiles poco informativos.
+
+Filtrado de genes con exceso de ceros: se eliminaron genes con más del 95% de ceros en las muestras, dado que aportan escasa señal biológica y tienden a introducir ruido en análisis posteriores.
+
+Eliminación de genes constantes (SD = 0): se descartaron variables sin variabilidad, ya que no contribuyen a discriminar entre clases y además pueden generar problemas matemáticos en la normalización (divisiones por cero).
+
+Normalización (centrado y escalado): se aplicó estandarización tipo z-score para asegurar que todos los genes contribuyen de forma comparable, especialmente en técnicas sensibles a escala como PCA, UMAP, KNN y SVM.
+
+Estos pasos permiten reducir ruido, eliminar redundancia y hacer el conjunto de datos más estable para modelado.
 ## 6.2 Métodos no supervisados
 
 ### 6.2.1 ¿Por qué se seleccionaron estas técnicas de reducción de dimensionalidad?
+Se seleccionaron PCA y UMAP porque ofrecen visiones complementarias del dataset de expresión génica (alta dimensionalidad y posible estructura compleja):
 
+PCA permite una reducción lineal de dimensionalidad maximizando la varianza explicada. En nuestro caso, el resultado muestra que se requieren aproximadamente 43 componentes para alcanzar el 70% de la varianza, lo que confirma la elevada complejidad y redundancia del dataset original. PCA es especialmente útil para detectar patrones globales y visualizar tendencias generales.
+
+UMAP se seleccionó por su capacidad para capturar estructuras no lineales y preservar vecindarios locales, algo común en datos biológicos donde la separación entre grupos puede no ser lineal. UMAP genera una proyección bidimensional que facilita la visualización y suele ofrecer una mejor separación visual de clases que PCA en estos casos.
 Se eligió **PCA** debido a la alta complejidad y dimensionalidad del dataset original (como demuestra el hecho de necesitar 43 componentes para alcanzar el 70% de la varianza). El objetivo principal era simplificar la estructura de los datos sin perder la información esencial, permitiendo identificar patrones globales y tendencias generales que a simple vista son invisibles. Además, se utilizó como paso previo para mejorar la eficiencia de otros algoritmos, eliminando el ruido y la redundancia entre variables correlacionadas.
 
 Se seleccionó **UMAP** dada su excepcional capacidad para preservar tanto la estructura local como la global en datasets de alta dimensionalidad, permitiendo identificar no solo qué muestras son similares entre sí, sino también cómo se relacionan los grandes grupos biológicos. A diferencia de métodos lineales como el PCA, UMAP gestiona eficazmente las relaciones no lineales intrínsecas en los datos de expresión génica, 'comprimiendo' miles de dimensiones en un espacio bidimensional sin sacrificar la topología de los datos. Además, esta técnica mejora significativamente la separabilidad de las clases, facilitando la tarea posterior de algoritmos supervisados como las máquinas de vectores de soporte (SVM) al generar límites de decisión mucho más definidos y compactos.
@@ -788,20 +804,40 @@ No se puede afirmar con certeza absoluta que los clústeres generados sean los m
 ## 6.3 Métodos supervisados
 
 ### 6.3.1 ¿Cuál es el motivo por el cual habéis seleccionado ambas técnicas de aprendizaje supervisado?
+Se seleccionaron KNN, SVM y Random Forest por ser modelos adecuados y complementarios para clasificación con datos de expresión génica:
 
+KNN permite comparar muestras por proximidad en el espacio de genes. Es sencillo y útil como baseline, aunque requiere escalado y puede verse afectado por alta dimensionalidad.
+
+SVM (kernel radial/RBF) es especialmente eficaz en alta dimensionalidad y permite fronteras de decisión no lineales, lo que encaja muy bien con perfiles genómicos complejos.
+
+Random Forest ofrece alta robustez frente a ruido, suele generalizar bien y además permite extraer importancia de variables (genes), aportando valor interpretativo.
 ### 6.3.2 ¿Cuál ha dado mejores resultados a la hora de clasificar las muestras?
+El rendimiento se evaluó mediante matriz de confusión y métricas (accuracy, sensibilidad, especificidad y F1). En este tipo de problemas multiclase, la métrica más informativa suele ser el F1 macro-promedio, ya que refleja el equilibrio del rendimiento entre clases.
 
+En nuestro caso, los modelos más competitivos suelen ser SVM y Random Forest, ya que gestionan mejor la alta dimensionalidad y capturan patrones complejos. KNN también obtiene resultados razonables pero suele verse más limitado por la maldición de la dimensionalidad.
 ### 6.3.3 ¿Habéis considerado oportuno implementar algún método de reducción de dimensionalidad para procesar los datos antes de implementarlos en dichas técnicas? ¿Por qué?
+Sí, se consideró debido a la alta dimensionalidad del dataset. PCA/UMAP pueden reducir redundancia y ruido, y facilitar el entrenamiento de algunos modelos como KNN. Sin embargo, en este trabajo se priorizó:
 
+filtrar genes no informativos (ceros/SD=0)
+
+normalizar
+
+usar modelos robustos en alta dimensión (SVM y RF)
+
+Esto evita perder señal potencialmente útil al proyectar en componentes, y mantiene interpretabilidad de genes (especialmente importante en Random Forest para estudiar importancia de variables). PCA y UMAP se aplicaron principalmente en el bloque no supervisado como análisis exploratorio y de visualización.
 ### 6.3.4 ¿Qué aspectos positivos y negativos tienen cada una de las técnicas que habéis escogido?
+Cada técnica supervisada presenta ventajas y limitaciones en este problema de clasificación con datos de expresión génica. En primer lugar, el clasificador KNN destaca por su sencillez y por ser un método intuitivo, ya que basa la predicción en la similitud con las muestras más cercanas. Esto puede ser útil cuando las clases presentan patrones de vecindad claros. Sin embargo, su rendimiento puede verse afectado por la alta dimensionalidad del dataset (maldición de la dimensionalidad), además de ser sensible a la escala de las variables (por lo que requiere normalización) y a la elección del parámetro k, que condiciona notablemente el resultado final.
 
+Por otro lado, las máquinas de vectores de soporte (SVM), especialmente con kernel radial, son muy adecuadas para datos con gran número de variables como los de expresión génica. Este método puede generar fronteras de decisión no lineales, lo que permite capturar patrones complejos y generalmente proporciona un buen rendimiento y capacidad de generalización. Como limitación, SVM suele requerir un ajuste cuidadoso de hiperparámetros y puede tener un mayor coste computacional, especialmente cuando se trabaja con conjuntos de datos de alta dimensión.
+
+Finalmente, Random Forest es un modelo robusto y flexible, capaz de manejar relaciones no lineales y de generalizar bien al combinar múltiples árboles de decisión. Una ventaja muy relevante en el contexto biológico es que permite obtener estimaciones de importancia de variables, lo que facilita identificar genes que contribuyen más a la clasificación. Como inconveniente, su interpretabilidad global es inferior a modelos más simples, y el rendimiento puede depender del ajuste de parámetros como el número de árboles o el número de variables evaluadas en cada partición.
 ## 6.4 De estas cuatro opciones, ¿qué tipo de arquitectura de deep learning sería la más adecuada para procesar datos de expresión génica?
 
 -   
 
     a)  Red de perceptrones (multiperceptron layers).
 
--   
+-   La arquitectura más adecuada para procesar datos de expresión génica en este caso sería una red de perceptrones multicapa (MLP), porque este tipo de datos se representa como una tabla de valores numéricos donde cada muestra es un vector de expresión (genes como variables). Es decir, no existe estructura espacial como en imágenes (donde tendría sentido una CNN), ni una dependencia temporal/secuencial clara como en textos o series temporales (donde se usarían RNN). Por ello, una MLP es el enfoque más natural y directo para aprender patrones complejos a partir de variables tabulares de alta dimensionalidad como los genes.
 
     b)  Redes convolucionales.
 
@@ -812,3 +848,4 @@ No se puede afirmar con certeza absoluta que los clústeres generados sean los m
 -   
 
     d)  Redes de grafos.
+

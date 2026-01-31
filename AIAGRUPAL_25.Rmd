@@ -21,20 +21,19 @@ En la última década, la biología molecular ha experimentado una transformaci�
 
 El presente trabajo aborda el análisis de un conjunto de datos de expresión génica compuesto por 801 muestras y 500 variables (genes). Este tipo de datos se caracteriza por el fenómeno conocido como "la maldición de la dimensionalidad" (curse of dimensionality), donde el número de variables es significativamente alto en comparación con el número de observaciones. El reto principal reside en identificar patrones biológicos significativos, conocidos como firmas moleculares, que permitan distinguir entre diferentes tipologías celulares o patologías.
 
-
 # 2. METODOLOGÍA
+
 Para abordar este desafío, se ha diseñado un flujo de trabajo integral que combina dos vertientes del aprendizaje automático:
 
-*    Aprendizaje No Supervisado: Mediante técnicas de reducción de dimensionalidad y clusterización (como el Análisis de Componentes Principales y la Clusterización Jerárquica), se busca explorar la estructura intrínseca de los datos sin etiquetas previas, facilitando la visualización y el descubrimiento de grupos naturales de muestras.
+-   Aprendizaje No Supervisado: Mediante técnicas de reducción de dimensionalidad y clusterización (como el Análisis de Componentes Principales y la Clusterización Jerárquica), se busca explorar la estructura intrínseca de los datos sin etiquetas previas, facilitando la visualización y el descubrimiento de grupos naturales de muestras.
 
-*    Aprendizaje Supervisado: Utilizando modelos de clasificación (como Random Forest y SVM), se entrena al sistema para reconocer y predecir la pertenencia de una muestra a una clase específica, evaluando la robustez de los modelos mediante métricas de precisión, sensibilidad y especificidad.
+-   Aprendizaje Supervisado: Utilizando modelos de clasificación (como Random Forest y SVM), se entrena al sistema para reconocer y predecir la pertenencia de una muestra a una clase específica, evaluando la robustez de los modelos mediante métricas de precisión, sensibilidad y especificidad.
 
 A través de la implementación de estos algoritmos en el lenguaje de programación R, este informe pretende demostrar cómo la aplicación rigurosa de la estadística y el aprendizaje automático permite transformar datos genómicos brutos en conocimiento biomédico accionable, facilitando el camino hacia la medicina de precisión y el diagnóstico personalizado.
 
-
 # 3. PREPROCESAMIENTO
 
-El flujo de trabajo comenzó con la integración de los perfiles de expresión génica, su nomenclatura y etiquetas clínicas, seguida de una normalización mediante centrado y escalado para estandarizar las magnitudes de los datos. Para garantizar la estabilidad de los algoritmos y eliminar ruido técnico, se realizó un filtrado crítico de las variables con varianza nula (SD=0), asegurando así que el análisis se centre exclusivamente en los genes que aportan variabilidad biológica informativa.
+El flujo de trabajo comenzó con la integración de los perfiles de expresión génica, su nomenclatura y etiquetas clínicas. Para garantizar la integridad de los datos, se aplicó un protocolo de control de calidad en etapas sucesivas: en primer lugar, se realizó un filtrado de muestras (filas) para eliminar aquellas con baja calidad técnica basadas en un exceso de valores nulos. Posteriormente, se efectuó un cribado de variables (genes), descartando aquellas con una presencia de ceros superior al 90% y aquellas con varianza nula (SD=0). Estas últimas se eliminan ya que, al ser constantes, no aportan información útil para distinguir patrones; además, su exclusión es matemáticamente necesaria para evitar errores de división por cero durante el escalado y asegurar que algoritmos como PCA o k-means se centren exclusivamente en la variabilidad biológica informativa. Finalmente, se aplicó una normalización mediante centrado y escalado sobre el set de datos depurado para estandarizar las magnitudes y permitir una comparación equitativa entre las variables restantes.
 
 ```{r PROCESADO, include=TRUE}
 set.seed(123)
@@ -72,7 +71,10 @@ data <- gene_expression %>%
   mutate(Class = as.factor(classes[,2]))
 
 
-#DEPURADO DE DATOS
+```
+
+## DEPURADO DE DATOS
+```{r depuración_NAs}
 ##calcular la proporcion de NA por gen
 na_prop <- colMeans(is.na(data))
 ##eliminar genes con mas del 20% de NA
@@ -86,50 +88,117 @@ data <- data[, na_prop < 0.2] #(no se elimina ningun gen)
 x <- data[, colnames(data) != "Class"]
 y <- data$Class
 
-#NORMALIZACION
-##centrar y escalar
-preproc_scale <- preProcess(x, method = c("center", "scale"))
-x_scaled <- predict(preproc_scale, x)
+```
+
+## RECUENTO DE CEROS
+
+```{r eliminadas_cero_filas}
+# identifican filas a eliminar
+zero_counts_filas <- rowSums(x == 0)
+umbral_filas <- ncol(x) * 0.95  # Umbral del 95% de los genes
+
+# Identifican muestras a eliminar
+indices_filas_eliminar <- which(zero_counts_filas > umbral_filas)
+nombres_muestras_eliminadas <- rownames(x)[indices_filas_eliminar]
+num_filas_eliminadas <- length(indices_filas_eliminar)
+
+cat("Muestras (filas) eliminadas (> 95% ceros):", num_filas_eliminadas, "\n")
+
+```
+
+```{r ceros_genes}
+zero_counts <- colSums(x == 0)
+umbral_95_por_ciento <- nrow(x) * 0.95 #umbral del 95%
+
+# Se crea un df con el numero de ceros por variable
+zero_df <- data.frame(
+  Variable = names(zero_counts),
+  Ceros = as.numeric(zero_counts)
+)
 
 
-##dataset final
-data_final <- x_scaled
-data_final$Class <- y
+# Total de filas para el porcentaje
+total_filas <- nrow(x)
+
+variables_criticas <- zero_df %>%
+  filter(Ceros > umbral_95_por_ciento) %>%
+  mutate(Porcentaje = (Ceros / total_filas) * 100) %>% # Crea la columna de porcentaje
+  arrange(desc(Ceros))                                 # Ordena de mayor a menor
+
+# Visualizar la tabla
+print(variables_criticas)
 
 
-# Tanto para PCA como para la clusterización se se eliminan las columnas con varianza 0 porque son variables constantes que no aportan ninguna información útil. Dado que PCA busca las direcciones de mayor variabilidad y K-means calcula distancias para agrupar puntos, una columna que siempre tiene el mismo valor no ayuda a distinguir a los individuos ni a identificar patrones, actuando solo como ruido innecesario. Además, mantener estas columnas causaría errores matemáticos (división por cero) durante el escalado de los datos, ya que estas técnicas necesitan que las variables presenten algún grado de variación para poder comparar sus magnitudes de forma correcta.
 
+```
+
+
+```{r eliminadas_ceros}
+# identifican variables a eliminar
+nombres_variables_eliminadas_ceros <- variables_criticas$Variable
+num_eliminadas <- length(nombres_variables_eliminadas_ceros)
+
+
+cat("Variables (columnas) eliminadas (> 95% ceros):", num_eliminadas, "\n")
+cat("Variables:", paste(nombres_variables_eliminadas_ceros, collapse = ", "), "\n")
+
+
+x_sin_ceros <- x[, !(names(x) %in% nombres_variables_eliminadas_ceros)]
+```
+
+
+
+## DESVIACIÓN ESTANDAR
+
+
+```{r sd}
 # Variables con desviación estandar 0
 # Columnas con SD = 0 que indican que son constantes
 
-desviaciones <- apply(x_scaled, 2, sd) # La función apply con margen 2 calcula la SD por columna.
+desviaciones <- apply(x_sin_ceros, 2, sd) # La función apply con margen 2 calcula la SD por columna.
 
 
 columnas_a_mantener <- desviaciones > 0 # se mantienen las columnas que su desviación estándar es > 0
-x_scaled_sd <- x_scaled # se crea una copia para no modificar el original
-data.filtrada2 <- x_scaled_sd[, columnas_a_mantener]
+
 
 genes_eliminados <- sum(!columnas_a_mantener)
-nombres_genes_eliminados <- colnames(x_scaled_sd)[!columnas_a_mantener]
+nombres_genes_eliminados <- colnames(x_sin_ceros)[!columnas_a_mantener]
 
 cat("Genes (columnas) eliminados (SD = 0):", genes_eliminados, "\n")
-cat("Genes:",paste(nombres_genes_eliminados, collapse = ", "), "\n")
 
 
 # filtro sobre el dataset original para dejar solo con los genes útiles
-x_filtrado <- x[, columnas_a_mantener]
+x_filtrado <- x_sin_ceros[, columnas_a_mantener]
 
-#  escalado y centrado sobre el dataset filtrado
+```
+
+
+## NORMALIZACIÓN
+
+```{r centrado y escalado}
+
+##centrar y escalar
 preproc_scale <- preProcess(x_filtrado, method = c("center", "scale"))
 X_scaled <- predict(preproc_scale, x_filtrado)
+
+
+##dataset final
+data_final <- X_scaled
+data_final$Class <- y
+
+cat("Dimensiones del dataset final:", dim(data_final))
 ```
+
 
 # 4. MÉTODOS NO SUPERVISADOS
 
 ## 4.1 Reducción de dimensionalidad
 
 ### 4.1.1 PCA
-xxx
+
+Se ha seleccionado PCA porque permite resumir y explorar la estructura de los datos en un conjunto de alta dimensión, como es este caso.
+
+Al mismo tiempo, el PCA es útil para explorar la estructura general de los datos, aunque no captura relaciones no lineales, por lo que se combina con ISOMAP para analizar patrones locales y complejos.
 
 ```{r PCA, include=TRUE}
 # Cálculo de componentes principales (usamos los datos ya escalados)
@@ -200,7 +269,9 @@ plot_ly(pca.df,
 ```
 
 ### 4.1.2 UMAP
+
 xxx
+
 ```{r UMAP, include=TRUE}
 # Cargar librerías adicionales necesarias
 library(uwot)
@@ -244,7 +315,11 @@ ggplot(umap_df, aes(x = UMAP1, y = UMAP2, color = Class)) +
 ```
 
 ## 4.2 CLUSTERIZACIÓN
+
 ### 4.2.1 kmeans
+
+Se ha seleccionado K-means por su simplicidad y eficiencia para identificar clusters. Aunque no captura relaciones no lineales, se aplica so sobre el dataset original y sobre el espacio reducido por PCA, donde los grupos son más distinguibles.
+
 ```{r k-means_n}
 ## K-means
 
@@ -273,7 +348,7 @@ kmeans.result <- kmeans(X_scaled,
 fviz_cluster(kmeans.result, 
              data = X_scaled, 
              geom = "point",
-             palette = c("#E41A1C", "#377EB8", "#4DAF4A", "#FF7F00"), 
+             palette = c("red", "blue", "green", "orange"), 
              ellipse.type = "convex", # Encierra los grupos en polígonos
              ggtheme = theme_minimal(),
              main = "Clustering K-means (k=4)")
@@ -304,7 +379,7 @@ fviz_cluster(kmeans.pca,
              palette = c("red", "blue", "green", "orange"),
              ellipse.type = "convex",
              ggtheme = theme_minimal(),
-             main = "K-means Clustering sobre PC1-PC3")
+             main = "K-means Clustering sobre PC1-PC3 (2D)")
 
 # 3. Preparar los clusters para el gráfico 3D
 clusters <- kmeans.pca$cluster
@@ -331,6 +406,7 @@ plot_ly(
 ```
 
 ### 4.2.2 HEATMAP
+
 ```{r HEATMAP}
 #===============================
 # CLUSTERIZACIÓN JERÁRQUICA AGLOMERATIVA: HEATMAP
@@ -387,7 +463,9 @@ pheatmap(t(matriz_anova),  # Transponer: genes en filas, muestras en columnas
 ```
 
 # 5. MÉTODOS SUPERVISADOS
+
 ## 5.1 KNN
+
 ```{r KNN}
 
 #IMPLEMENTACION DE KNN
@@ -473,6 +551,7 @@ ggplot(cm_df, aes(x = Reference, y = Prediction, fill = Freq)) +
 ```
 
 ## 5.2 SVM
+
 ```{r SVM}
 # Comprobación de que el entorno está preparado
 exists("data_final")
@@ -562,8 +641,8 @@ f1_macro
 
 ```
 
-
 ## 5.3 RANDOM FOREST
+
 ```{r RF}
 #APRENDIZAJE NO SUPERVISADO RANDOM FOREST
 library(randomForest)
@@ -650,21 +729,20 @@ if(length(errors) > 0 && length(errors) <= 10) {
   print(error_df)
 }
 ```
+
 # 6. RESPUESTA A LAS PREGUNTAS
 
 ## 6.1 Procesamiento de los datos
 
 ### 6.1.1 ¿Qué método habéis escogido para llevar a cabo la imputación de los datos?
 
-### 6.1.2	¿Habéis llevado a cabo algún otro tipo de procesamiento?
+### 6.1.2 ¿Habéis llevado a cabo algún otro tipo de procesamiento?
 
-
-
-## 6.2	Métodos no supervisados 
+## 6.2 Métodos no supervisados
 
 ### 6.2.1 ¿Por qué se seleccionaron estas técnicas de reducción de dimensionalidad?
 
-Se eligió **PCA** debido a la alta complejidad y dimensionalidad del dataset original (como demuestra el hecho de necesitar 44 componentes para alcanzar el 70% de la varianza). El objetivo principal era simplificar la estructura de los datos sin perder la información esencial, permitiendo identificar patrones globales y tendencias generales que a simple vista son invisibles. Además, se utilizó como paso previo para mejorar la eficiencia de otros algoritmos, eliminando el ruido y la redundancia entre variables correlacionadas.
+Se eligió **PCA** debido a la alta complejidad y dimensionalidad del dataset original (como demuestra el hecho de necesitar 43 componentes para alcanzar el 70% de la varianza). El objetivo principal era simplificar la estructura de los datos sin perder la información esencial, permitiendo identificar patrones globales y tendencias generales que a simple vista son invisibles. Además, se utilizó como paso previo para mejorar la eficiencia de otros algoritmos, eliminando el ruido y la redundancia entre variables correlacionadas.
 
 Se seleccionó **UMAP** dada su excepcional capacidad para preservar tanto la estructura local como la global en datasets de alta dimensionalidad, permitiendo identificar no solo qué muestras son similares entre sí, sino también cómo se relacionan los grandes grupos biológicos. A diferencia de métodos lineales como el PCA, UMAP gestiona eficazmente las relaciones no lineales intrínsecas en los datos de expresión génica, 'comprimiendo' miles de dimensiones en un espacio bidimensional sin sacrificar la topología de los datos. Además, esta técnica mejora significativamente la separabilidad de las clases, facilitando la tarea posterior de algoritmos supervisados como las máquinas de vectores de soporte (SVM) al generar límites de decisión mucho más definidos y compactos.
 
@@ -676,58 +754,61 @@ La elección de la **clusterización jerárquica aglomerativa (Heatmap)** respon
 
 ### 6.2.3. Aspectos positivos y negativos de cada una
 
-* **PCA:**
-  * **Positivo:** Excelente para comprimir información y facilitar la visualización de grandes volúmenes de datos. Ayuda a evitar el *overfitting* al reducir el número de variables.
-  * **Negativo:** Tiene una naturaleza lineal, lo que significa que si existen relaciones complejas o curvas en los datos (no lineales), el PCA no podrá capturarlas adecuadamente.
+-   **PCA:**
+    -   **Positivo:** Excelente para comprimir información y facilitar la visualización de grandes volúmenes de datos. Ayuda a evitar el *overfitting* al reducir el número de variables.
+    -   **Negativo:** Tiene una naturaleza lineal, lo que significa que si existen relaciones complejas o curvas en los datos (no lineales), el PCA no podrá capturarlas adecuadamente.
+-   **UMAP:**
+    -   **Positivo:**
+        -   Conservación de la topología: A diferencia de t-SNE, UMAP suele mantener mejor las distancias entre clústeres lejanos. Por ejemplo, en tu gráfico, la distancia de AGH al resto tiene un significado biológico real de diferenciación.
+        -   Escalabilidad y Velocidad: Es computacionalmente más eficiente que otros algoritmos no lineales, lo que permite procesar grandes matrices de expresión génica rápidamente.
+        -   Claridad Visual: Genera agrupamientos muy definidos, lo que ayuda a identificar subtipos celulares o estados patológicos de forma intuitiva.
+    -   **Negativo:**
+        -   Sensibilidad a Hiperparámetros: la elección de n_neighbors (vecinos) y min_dist (distancia mínima) cambia drásticamente el resultado.
+        -   Un "n_neighbors" bajo se enfoca en detalles muy pequeños.
+        -   Un "n_neighbors" alto prioriza la visión general.
+        -   Interpretación de los ejes: Los ejes UMAP1 y UMAP2 no tienen una unidad física ni una magnitud biológica directa (como sí la tienen los Componentes Principales en un PCA). Son unidades abstractas.
+        -   Naturaleza Estocástica: Si no se fija una "semilla" (seed), el gráfico puede variar ligeramente cada vez que se ejecuta, lo que puede afectar la reproducibilidad si no se es cuidadoso.
+-   **K-means:**
+    -   **Positivo:** Es extremadamente rápido y escalable. Su implementación es intuitiva y permite asignar etiquetas de grupo de manera inmediata a cada observación.
 
-* **UMAP:**
-  * **Positivo:** 
-    * Conservación de la topología: A diferencia de t-SNE, UMAP suele mantener mejor las distancias entre clústeres lejanos. Por ejemplo, en tu gráfico, la distancia de AGH al resto tiene un significado biológico real de diferenciación.
-    * Escalabilidad y Velocidad: Es computacionalmente más eficiente que otros algoritmos no lineales, lo que permite procesar grandes matrices de expresión génica rápidamente.
-    *  Claridad Visual: Genera agrupamientos muy definidos, lo que ayuda a identificar subtipos celulares o estados patológicos de forma intuitiva.
-
-  * **Negativo:**
-    * Sensibilidad a Hiperparámetros: la elección de n_neighbors (vecinos) y min_dist (distancia mínima) cambia drásticamente el resultado.
-    * Un "n_neighbors" bajo se enfoca en detalles muy pequeños.
-    * Un "n_neighbors" alto prioriza la visión general.
-    * Interpretación de los ejes: Los ejes UMAP1 y UMAP2 no tienen una unidad física ni una magnitud biológica directa (como sí la tienen los Componentes Principales en un PCA). Son unidades abstractas.
-    * Naturaleza Estocástica: Si no se fija una "semilla" (seed), el gráfico puede variar ligeramente cada vez que se ejecuta, lo que puede afectar la reproducibilidad si no se es cuidadoso.
-
-* **K-means:**
-  * **Positivo:** Es extremadamente rápido y escalable. Su implementación es intuitiva y permite asignar etiquetas de grupo de manera inmediata a cada observación.
-  
-  * **Negativo:** Es muy vulnerable a los valores atípicos  y obliga a definir de antemano el número de clústeres , lo cual no siempre es evidente. Además, asume que los grupos tienen formas esféricas, lo que no siempre ocurre en la realidad.
-
-
-* **Heatmap**
-  * **Positivos:**
-    * Jerarquía visual: Gracias al dendrograma, podemos ver no solo que dos muestras son parecidas, sino qué tan parecidas son en relación con el resto del dataset sin prefijar el número de grupos (a diferencia de K-means).
-    * Robustez: Como bien dicen tus apuntes, Ward es más resistente a valores atípicos (outliers) porque su métrica se basa en la suma de cuadrados, lo que suaviza el impacto de ruidos puntuales en la medición de un gen.
-    * Interpretación Dual: Es la única técnica que permite ver el "porqué" de un clúster: podemos señalar exactamente qué genes están "en rojo" (sobreexpresados) para justificar la agrupación de una muestra.
-
-  * **Negativos:**
-    * Coste Computacional: Al calcular una matriz de distancias completa (N×N), si el dataset fuera de millones de muestras en lugar de 801, el ordenador se quedaría sin memoria.
-    *Inestabilidad (Sensibilidad): Si eliminamos algunas muestras de una clase (ej. 10 muestras de BRCA), el árbol jerárquico podría reestructurarse de forma distinta, lo que complica la replicabilidad exacta en otros estudios.
-    * Subjetividad: La elección de la distancia (Euclídea) y el linkage (Ward) es una decisión del investigador; otro analista podría usar distancia Manhattan y obtener grupos diferentes.
-
+    -   **Negativo:** Es muy vulnerable a los valores atípicos y obliga a definir de antemano el número de clústeres , lo cual no siempre es evidente. Además, asume que los grupos tienen formas esféricas, lo que no siempre ocurre en la realidad.
+-   **Heatmap**
+    -   **Positivos:**
+        -   Jerarquía visual: Gracias al dendrograma, podemos ver no solo que dos muestras son parecidas, sino qué tan parecidas son en relación con el resto del dataset sin prefijar el número de grupos (a diferencia de K-means).
+        -   Robustez: Como bien dicen tus apuntes, Ward es más resistente a valores atípicos (outliers) porque su métrica se basa en la suma de cuadrados, lo que suaviza el impacto de ruidos puntuales en la medición de un gen.
+        -   Interpretación Dual: Es la única técnica que permite ver el "porqué" de un clúster: podemos señalar exactamente qué genes están "en rojo" (sobreexpresados) para justificar la agrupación de una muestra.
+    -   **Negativos:**
+        -   Coste Computacional: Al calcular una matriz de distancias completa (N×N), si el dataset fuera de millones de muestras en lugar de 801, el ordenador se quedaría sin memoria. \*Inestabilidad (Sensibilidad): Si eliminamos algunas muestras de una clase (ej. 10 muestras de BRCA), el árbol jerárquico podría reestructurarse de forma distinta, lo que complica la replicabilidad exacta en otros estudios.
+        -   Subjetividad: La elección de la distancia (Euclídea) y el linkage (Ward) es una decisión del investigador; otro analista podría usar distancia Manhattan y obtener grupos diferentes.
 
 ### 6.2.4. En la clusterización, ¿podéis afirmar con certeza que los clústeres generados son los mejores posibles?
 
 No se puede afirmar con certeza absoluta que los clústeres generados sean los mejores posibles, ya que la clusterización es un proceso de aprendizaje no supervisado donde el resultado óptimo es dependiente de la métrica y el algoritmo utilizado. Esta incertidumbre se confirma al contrastar los resultados de K-means con la clusterización jerárquica del Heatmap, donde se observa un solapamiento significativo y una falta de fronteras nítidas entre grupos específicos (como CFB, CGC, CHC y HPB), indicando que sus perfiles de expresión son altamente similares. Mientras que K-means puede converger en mínimos locales debido a la disposición inicial de los centroides, la estructura jerárquica del Heatmap revela que, aunque existen tendencias globales claras, la alta dimensionalidad y la naturaleza no lineal de los datos sugieren la existencia de agrupaciones más óptimas que las métricas de distancia tradicionales no logran capturar con total precisión.
 
-## 6.3	Métodos supervisados 
+## 6.3 Métodos supervisados
 
-### 6.3.1	¿Cuál es el motivo por el cual habéis seleccionado ambas técnicas de aprendizaje supervisado? 
+### 6.3.1 ¿Cuál es el motivo por el cual habéis seleccionado ambas técnicas de aprendizaje supervisado?
 
 ### 6.3.2 ¿Cuál ha dado mejores resultados a la hora de clasificar las muestras?
 
-### 6.3.3	¿Habéis considerado oportuno implementar algún método de reducción de dimensionalidad para procesar los datos antes de implementarlos en dichas técnicas? ¿Por qué?
+### 6.3.3 ¿Habéis considerado oportuno implementar algún método de reducción de dimensionalidad para procesar los datos antes de implementarlos en dichas técnicas? ¿Por qué?
 
-### 6.3.4	¿Qué aspectos positivos y negativos tienen cada una de las técnicas que habéis escogido?
+### 6.3.4 ¿Qué aspectos positivos y negativos tienen cada una de las técnicas que habéis escogido?
 
-## 6.4	De estas cuatro opciones, ¿qué tipo de arquitectura de deep learning sería la más adecuada para procesar datos de expresión génica?
-*	a) Red de perceptrones (multiperceptron layers).
-*	b) Redes convolucionales.
-*	c) Redes recurrentes.
-*	d) Redes de grafos.
+## 6.4 De estas cuatro opciones, ¿qué tipo de arquitectura de deep learning sería la más adecuada para procesar datos de expresión génica?
 
+-   
+
+    a)  Red de perceptrones (multiperceptron layers).
+
+-   
+
+    b)  Redes convolucionales.
+
+-   
+
+    c)  Redes recurrentes.
+
+-   
+
+    d)  Redes de grafos.

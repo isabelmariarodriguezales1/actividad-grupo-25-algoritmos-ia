@@ -842,9 +842,11 @@ En segundo lugar, el modelo Random Forest (RF) mostró también un buen rendimie
 
 ### 6.3.3 ¿Habéis considerado oportuno implementar algún método de reducción de dimensionalidad para procesar los datos antes de implementarlos en dichas técnicas? ¿Por qué?
 
-Sí, se consideró debido a la alta dimensionalidad del dataset. PCA/UMAP pueden reducir redundancia y ruido, y facilitar el entrenamiento de algunos modelos como KNN. Sin embargo, en este trabajo se priorizó:
+Sí, se consideró la posibilidad de aplicar métodos de reducción de dimensionalidad como PCA o UMAP antes del entrenamiento de los modelos supervisados, debido a la alta dimensionalidad del dataset de expresión génica. Sin embargo, se decidió no aplicar estas técnicas en el bloque supervisado, y trabajar directamente sobre el espacio original de genes tras un preprocesamiento riguroso.
 
-filtrar genes no informativos (ceros/SD=0), normalizar y usar modelos robustos en alta dimensión (SVM y RF) Esto evita perder señal potencialmente útil al proyectar en componentes, y mantiene interpretabilidad de genes (especialmente importante en Random Forest para estudiar importancia de variables). PCA y UMAP se aplicaron principalmente en el bloque no supervisado como análisis exploratorio y de visualización.
+Los modelos empleados (SVM con kernel radial y Random Forest) están específicamente diseñados para manejar espacios de alta dimensionalidad y relaciones no lineales, por lo que no requieren necesariamente una reducción previa de dimensiones para funcionar de manera eficaz. Además, en el caso de Random Forest, mantener los genes originales es fundamental para poder interpretar la importancia de las variables y extraer conclusiones biológicas.
+
+Por último, los métodos de reducción de dimensionalidad se reservaron para el bloque no supervisado con un objetivo principalmente exploratorio y de visualización (PCA y UMAP), mientras que en el aprendizaje supervisado se priorizó la preservación de la información original para maximizar la capacidad predictiva y la interpretabilidad de los modelos.
 
 ### 6.3.4 ¿Qué aspectos positivos y negativos tienen cada una de las técnicas que habéis escogido?
 

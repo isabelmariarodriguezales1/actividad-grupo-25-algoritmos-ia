@@ -10,8 +10,23 @@ output:
     highlight: tango
 ---
 
-```{r setup, include=FALSE}
+```{r setup, include=TRUE}
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+library(pheatmap)
+library(RColorBrewer)
+
+set.seed(123)
+
+library(tidyverse)
+library(caret)
+library(factoextra)
+library(plotly)
+library(uwot)
+library(ggplot2)
+library(randomForest)
+
+
 
 ```
 
@@ -36,12 +51,6 @@ A través de la implementación de estos algoritmos en el lenguaje de programaci
 El flujo de trabajo comenzó con la integración de los perfiles de expresión génica, su nomenclatura y etiquetas clínicas. Para garantizar la integridad de los datos, se aplicó un protocolo de control de calidad en etapas sucesivas: en primer lugar, se realizó un filtrado de muestras (filas) para eliminar aquellas con baja calidad técnica basadas en un exceso de valores nulos. Posteriormente, se efectuó un cribado de variables (genes), descartando aquellas con una presencia de ceros superior al 90% y aquellas con varianza nula (SD=0). Estas últimas se eliminan ya que, al ser constantes, no aportan información útil para distinguir patrones; además, su exclusión es matemáticamente necesaria para evitar errores de división por cero durante el escalado y asegurar que algoritmos como PCA o k-means se centren exclusivamente en la variabilidad biológica informativa. Finalmente, se aplicó una normalización mediante centrado y escalado sobre el set de datos depurado para estandarizar las magnitudes y permitir una comparación equitativa entre las variables restantes.
 
 ```{r PROCESADO, include=TRUE}
-set.seed(123)
-
-library(tidyverse)
-library(caret)
-library(factoextra)
-library(plotly)
 
 
 gene_expression <- read.table("gene_expression.csv",
@@ -74,6 +83,7 @@ data <- gene_expression %>%
 ```
 
 ## DEPURADO DE DATOS
+
 ```{r depuración_NAs}
 ##calcular la proporcion de NA por gen
 na_prop <- colMeans(is.na(data))
@@ -132,7 +142,6 @@ print(variables_criticas)
 
 ```
 
-
 ```{r eliminadas_ceros}
 # identifican variables a eliminar
 nombres_variables_eliminadas_ceros <- variables_criticas$Variable
@@ -146,10 +155,7 @@ cat("Variables:", paste(nombres_variables_eliminadas_ceros, collapse = ", "), "\
 x_sin_ceros <- x[, !(names(x) %in% nombres_variables_eliminadas_ceros)]
 ```
 
-
-
 ## DESVIACIÓN ESTANDAR
-
 
 ```{r sd}
 # Variables con desviación estandar 0
@@ -172,7 +178,6 @@ x_filtrado <- x_sin_ceros[, columnas_a_mantener]
 
 ```
 
-
 ## NORMALIZACIÓN
 
 ```{r centrado y escalado}
@@ -189,16 +194,13 @@ data_final$Class <- y
 cat("Dimensiones del dataset final:", dim(data_final))
 ```
 
-
 # 4. MÉTODOS NO SUPERVISADOS
 
 ## 4.1 Reducción de dimensionalidad
 
 ### 4.1.1 PCA
 
-Se ha seleccionado PCA porque permite resumir y explorar la estructura de los datos en un conjunto de alta dimensión, como es este caso.
-
-Al mismo tiempo, el PCA es útil para explorar la estructura general de los datos, aunque no captura relaciones no lineales, por lo que se combina con ISOMAP para analizar patrones locales y complejos.
+Se ha seleccionado PCA porque permite resumir y explorar la estructura de los datos en un conjunto de alta dimensión, como es este caso. Al mismo tiempo, el PCA es útil para explorar la estructura general de los datos, aunque no captura relaciones no lineales.
 
 ```{r PCA, include=TRUE}
 # Cálculo de componentes principales (usamos los datos ya escalados)
@@ -228,7 +230,7 @@ y_label <- paste0("PC2 (", round(varianza.explicada[2] * 100, 2), "%)")
 # Usamos 'y' que definimos antes como el factor de las clases
 ggplot(pca.df, aes(x = PC1, y = PC2, color = y)) + 
   geom_point(size = 3, alpha = 0.8) +
-  scale_color_manual(values = c('red', 'blue', 'green', 'orange', 'purple')) +
+  scale_color_manual(values = c("#F8766D", "#A3A000", "#00B0F6", "#00BF7D", "#E76BF3")) +
   labs(title = 'PCA', 
       
        x = x_label, 
@@ -246,8 +248,6 @@ ggplot(pca.df, aes(x = PC1, y = PC2, color = y)) +
 
 ### Gráfico PCA 3D
 
-library(plotly)
-
 # Definir la etiqueta del tercer eje (PC3)
 z_label <- paste0('PC3 (', round(varianza.explicada[3]*100, 2), '%)')
 
@@ -257,7 +257,7 @@ plot_ly(pca.df,
         y = ~PC2, 
         z = ~PC3, 
         color = ~y,  # Usamos 'y' que contiene tus etiquetas de Class
-        colors = c('red', 'blue', 'green', 'orange', 'purple'),
+        colors = c("#F8766D", "#A3A000", "#00B0F6", "#00BF7D", "#E76BF3"),
         type = 'scatter3d', 
         mode = 'markers',
         marker = list(size = 4, opacity = 0.8)) %>%
@@ -273,9 +273,6 @@ plot_ly(pca.df,
 xxx
 
 ```{r UMAP, include=TRUE}
-# Cargar librerías adicionales necesarias
-library(uwot)
-library(ggplot2)
 
 # Separar datos y etiquetas para UMAP
 x_umap <- data_final[, colnames(data_final) != "Class"]
@@ -316,15 +313,13 @@ ggplot(umap_df, aes(x = UMAP1, y = UMAP2, color = Class)) +
 
 ## 4.2 CLUSTERIZACIÓN
 
-### 4.2.1 kmeans
+### 4.2.1 K-means
 
 Se ha seleccionado K-means por su simplicidad y eficiencia para identificar clusters. Aunque no captura relaciones no lineales, se aplica so sobre el dataset original y sobre el espacio reducido por PCA, donde los grupos son más distinguibles.
 
 ```{r k-means_n}
 ## K-means
 
-
-library(factoextra)
 # n optimo de clusters
 fviz_nbclust(X_scaled, kmeans, method = "wss") +
   ggtitle("Optimal number of clusters", subtitle = "") +
@@ -348,7 +343,7 @@ kmeans.result <- kmeans(X_scaled,
 fviz_cluster(kmeans.result, 
              data = X_scaled, 
              geom = "point",
-             palette = c("red", "blue", "green", "orange"), 
+             palette = c("#F8766D", "#A3A000", "#00B0F6", "#00BF7D"), 
              ellipse.type = "convex", # Encierra los grupos en polígonos
              ggtheme = theme_minimal(),
              main = "Clustering K-means (k=4)")
@@ -376,7 +371,7 @@ kmeans.pca <- kmeans(pca.df[, 1:3],
 fviz_cluster(kmeans.pca, 
              data = pca.df[, 1:3], 
              geom = "point", 
-             palette = c("red", "blue", "green", "orange"),
+             palette = c("#F8766D", "#A3A000", "#00B0F6", "#00BF7D"),
              ellipse.type = "convex",
              ggtheme = theme_minimal(),
              main = "K-means Clustering sobre PC1-PC3 (2D)")
@@ -390,7 +385,7 @@ plot_ly(
   y = pca.df[, 2],
   z = pca.df[, 3],
   color = as.factor(clusters),
-  colors = c("red", "blue", "green", "orange"),
+  colors = c("#F8766D", "#A3A000", "#00B0F6", "#00BF7D"),
   type = "scatter3d",
   mode = "markers",
   marker = list(size = 4, opacity = 0.8)
@@ -408,12 +403,8 @@ plot_ly(
 ### 4.2.2 HEATMAP
 
 ```{r HEATMAP}
-#===============================
-# CLUSTERIZACIÓN JERÁRQUICA AGLOMERATIVA: HEATMAP
-#===============================
 
-library(pheatmap)
-library(RColorBrewer)
+
 
 # Calcular varianza de cada gen
 varianzas <- apply(x_filtrado, 2, var)
@@ -438,11 +429,16 @@ annotation_col <- data.frame(
 
 rownames(annotation_col) <- rownames(matriz_anova)
 
+
+
+
+colores_estilo_umap <- c("#F8766D", "#A3A000", "#00B0F6", "#00BF7D", "#E76BF3")
+
 # Colores para las clases
 ann_colors <- list(
   Clase = setNames(
-    brewer.pal(length(unique(y)), "Set1"),
-    unique(y)
+    colores_estilo_umap,
+    unique(y) 
   )
 )
 
@@ -478,9 +474,9 @@ data_knn <- as.data.frame(X_scaled)
 data_knn$Class <- y
 
 
-# -------------------------------
+
 # División en entrenamiento y test
-# -------------------------------
+
 
 set.seed(123)
 
@@ -493,9 +489,9 @@ train_data <- data_knn[train_index, ]
 test_data  <- data_knn[-train_index, ]
 
 
-# -------------------------------
+
 # Entrenamiento del modelo KNN
-# -------------------------------
+
 
 # Se utiliza validación cruzada (10-fold CV)
 # para seleccionar el valor óptimo de k
@@ -525,9 +521,9 @@ knn_model
 
 #El mejor valor de K que se ha obtenido ha sido o bien k = 9, k = 11, k = 13, pero caret elige 13 (primer máximo estable)
 
-# -------------------------------
+
 # Evaluación del modelo
-# -------------------------------
+
 
 # Predicciones sobre el conjunto de test
 pred_knn <- predict(knn_model, newdata = test_data)
@@ -538,7 +534,6 @@ cm
 
 cm_df <- as.data.frame(cm$table)
 
-library(ggplot2)
 
 ggplot(cm_df, aes(x = Reference, y = Prediction, fill = Freq)) +
   geom_tile(color = "white") +
@@ -553,11 +548,7 @@ ggplot(cm_df, aes(x = Reference, y = Prediction, fill = Freq)) +
 ## 5.2 SVM
 
 ```{r SVM}
-# Comprobación de que el entorno está preparado
-exists("data_final")
-dim(data_final)
-names(data_final)[1:5]
-table(data_final$Class)
+
 
 # Preparar X (predictores) e y (clases)
 X <- data_final[, colnames(data_final) != "Class"]
@@ -567,7 +558,7 @@ dim(X)
 length(y)
 
 # Cargar librería (partición estratificada + entrenamiento + evaluación)
-library(caret)
+
 
 # Eliminar predictores con varianza cero (evita warnings al centrar/escalar)
 nzv <- nearZeroVar(X, saveMetrics = TRUE)
@@ -639,13 +630,30 @@ f1
 f1_macro <- mean(f1, na.rm = TRUE)
 f1_macro
 
+
+
+
+```
+```{r}
+#matriz de confusión a data frame
+cm_df <- as.data.frame(cm$table)
+
+
+
+ggplot(cm_df, aes(x = Reference, y = Prediction, fill = Freq)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = Freq), size = 5) +
+  scale_fill_gradient(low = "white", high = "firebrick") +
+  labs(title = "Matriz de Confusión: Clasificador SVM",
+       x = "Clase Real (Referencia)",
+       y = "Clase Predicha") +
+  theme_minimal()
 ```
 
 ## 5.3 RANDOM FOREST
 
 ```{r RF}
 #APRENDIZAJE NO SUPERVISADO RANDOM FOREST
-library(randomForest)
 
 ##division de datos (0.7 train y 0.3 test)
 trainIndex <- createDataPartition(data_final$Class, p = 0.7, lis = FALSE)
@@ -729,6 +737,20 @@ if(length(errors) > 0 && length(errors) <= 10) {
   print(error_df)
 }
 ```
+```{r matriz_confucion_rf}
+
+cm_rf_df <- as.data.frame(conf_matrix$table)
+
+
+ggplot(cm_rf_df, aes(x = Reference, y = Prediction, fill = Freq)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = Freq), size = 5) +
+  scale_fill_gradient(low = "white", high = "darkgreen") + # Color verde para variar del SVM
+  labs(title = "Matriz de Confusión: Random Forest",
+       x = "Clase Real (Referencia)",
+       y = "Clase Predicha") +
+  theme_minimal()
+```
 
 # 6. RESPUESTA A LAS PREGUNTAS
 
@@ -736,8 +758,23 @@ if(length(errors) > 0 && length(errors) <= 10) {
 
 ### 6.1.1 ¿Qué método habéis escogido para llevar a cabo la imputación de los datos?
 
+En el flujo de preprocesamiento se evaluó primero la presencia de valores perdidos (NA) por gen. Tras aplicar el filtrado por proporción de NA (umbral \< 20%), se comprobó que en el conjunto de datos final no existían valores NA, por lo que no fue necesaria una imputación efectiva para continuar con los análisis.
+
+Aun así, se consideró como método idóneo para un caso real la imputación mediante KNN (K-Nearest Neighbors), ya que en datos de expresión génica resulta ventajoso imputar utilizando la similitud multivariante entre muestras. Este enfoque preserva mejor las correlaciones y patrones de coexpresión que métodos más simples como media/mediana, que podrían distorsionar la estructura biológica del dataset.
+
 ### 6.1.2 ¿Habéis llevado a cabo algún otro tipo de procesamiento?
 
+Sí. Se implementaron varios pasos adicionales importantes para mejorar la calidad del dataset y optimizar el rendimiento de los algoritmos:
+
+Filtrado de muestras con exceso de ceros: se eliminaron muestras con más del 95% de genes con valor 0, ya que este patrón suele asociarse a baja calidad técnica o perfiles poco informativos.
+
+Filtrado de genes con exceso de ceros: se eliminaron genes con más del 95% de ceros en las muestras, dado que aportan escasa señal biológica y tienden a introducir ruido en análisis posteriores.
+
+Eliminación de genes constantes (SD = 0): se descartaron variables sin variabilidad, ya que no contribuyen a discriminar entre clases y además pueden generar problemas matemáticos en la normalización (divisiones por cero).
+
+Normalización (centrado y escalado): se aplicó estandarización tipo z-score para asegurar que todos los genes contribuyen de forma comparable, especialmente en técnicas sensibles a escala como PCA, UMAP, KNN y SVM.
+
+Estos pasos permiten reducir ruido, eliminar redundancia y hacer el conjunto de datos más estable para modelado. 
 ## 6.2 Métodos no supervisados
 
 ### 6.2.1 ¿Por qué se seleccionaron estas técnicas de reducción de dimensionalidad?
@@ -789,26 +826,54 @@ No se puede afirmar con certeza absoluta que los clústeres generados sean los m
 
 ### 6.3.1 ¿Cuál es el motivo por el cual habéis seleccionado ambas técnicas de aprendizaje supervisado?
 
-### 6.3.2 ¿Cuál ha dado mejores resultados a la hora de clasificar las muestras?
+Se seleccionaron KNN, SVM y Random Forest por ser modelos adecuados y complementarios para clasificación con datos de expresión génica:
+
+KNN permite comparar muestras por proximidad en el espacio de genes. Es sencillo y útil como baseline, aunque requiere escalado y puede verse afectado por alta dimensionalidad.
+
+SVM (kernel radial/RBF) es especialmente eficaz en alta dimensionalidad y permite fronteras de decisión no lineales, lo que encaja muy bien con perfiles genómicos complejos.
+
+Random Forest ofrece alta robustez frente a ruido, suele generalizar bien y además permite extraer importancia de variables (genes), aportando valor interpretativo. 
+
+### 6.3.2 ¿Cuál ha dado mejores resultados a la hora de clasificar las muestras? 
+
+Tras analizar los resultados de las matrices de confusión, el modelo KNN es el que presenta el mejor desempeño, logrando una exactitud (Accuracy) del 100% y un índice Kappa de 1.0. Este modelo clasificó correctamente la totalidad de las muestras, mostrando una sensibilidad y especificidad perfectas en todas las categorías.
+
+En segundo lugar, el modelo Random Forest (RF) mostró también un buen rendimiento con una precisión del 97.48%, cometiendo únicamente errores marginales en la distinción de las clases CGC y HPB. Por el contrario, el modelo SVM resultó ser el menos eficaz, aunque su precisión global es del 85.53%, presenta un fallo crítico en la clase CHC, donde su sensibilidad cae drásticamente al 14.8%, lo que indica una incapacidad casi total para identificar correctamente dicha categoría en comparación con los otros dos algoritmos.
 
 ### 6.3.3 ¿Habéis considerado oportuno implementar algún método de reducción de dimensionalidad para procesar los datos antes de implementarlos en dichas técnicas? ¿Por qué?
 
+Sí, se consideró debido a la alta dimensionalidad del dataset. PCA/UMAP pueden reducir redundancia y ruido, y facilitar el entrenamiento de algunos modelos como KNN. Sin embargo, en este trabajo se priorizó:
+
+filtrar genes no informativos (ceros/SD=0), normalizar y usar modelos robustos en alta dimensión (SVM y RF) Esto evita perder señal potencialmente útil al proyectar en componentes, y mantiene interpretabilidad de genes (especialmente importante en Random Forest para estudiar importancia de variables). PCA y UMAP se aplicaron principalmente en el bloque no supervisado como análisis exploratorio y de visualización.
+
 ### 6.3.4 ¿Qué aspectos positivos y negativos tienen cada una de las técnicas que habéis escogido?
+
+Cada técnica supervisada presenta ventajas y limitaciones en este problema de clasificación con datos de expresión génica. En primer lugar, el clasificador KNN destaca por su sencillez y por ser un método intuitivo, ya que basa la predicción en la similitud con las muestras más cercanas. Esto puede ser útil cuando las clases presentan patrones de vecindad claros. Sin embargo, su rendimiento puede verse afectado por la alta dimensionalidad del dataset (maldición de la dimensionalidad), además de ser sensible a la escala de las variables (por lo que requiere normalización) y a la elección del parámetro k, que condiciona notablemente el resultado final.
+
+Por otro lado, las máquinas de vectores de soporte (SVM), especialmente con kernel radial, son muy adecuadas para datos con gran número de variables como los de expresión génica. Este método puede generar fronteras de decisión no lineales, lo que permite capturar patrones complejos y generalmente proporciona un buen rendimiento y capacidad de generalización. Como limitación, SVM suele requerir un ajuste cuidadoso de hiperparámetros y puede tener un mayor coste computacional, especialmente cuando se trabaja con conjuntos de datos de alta dimensión.
+
+Finalmente, Random Forest es un modelo robusto y flexible, capaz de manejar relaciones no lineales y de generalizar bien al combinar múltiples árboles de decisión. Una ventaja muy relevante en el contexto biológico es que permite obtener estimaciones de importancia de variables, lo que facilita identificar genes que contribuyen más a la clasificación. Como inconveniente, su interpretabilidad global es inferior a modelos más simples, y el rendimiento puede depender del ajuste de parámetros como el número de árboles o el número de variables evaluadas en cada partición.
 
 ## 6.4 De estas cuatro opciones, ¿qué tipo de arquitectura de deep learning sería la más adecuada para procesar datos de expresión génica?
 
--   
+En el caso de los datos de expresión génica utilizados en esta práctica, donde cada muestra se representa como un vector de valores numéricos correspondiente a la expresión de distintos genes, la arquitectura de deep learning más adecuada sería una red neuronal multicapa tipo perceptrón (MLP). Esto se debe a que el dataset tiene una estructura tabular, sin organización espacial como en imágenes ni dependencias secuenciales explícitas como en series temporales. Por tanto, una red MLP se adapta de forma directa a este tipo de entradas y permite modelar relaciones complejas entre genes mediante capas densas.
 
-    a)  Red de perceptrones (multiperceptron layers).
+En comparación, las redes convolucionales suelen ser más apropiadas cuando existe una estructura espacial local (como sucede en imágenes), las redes recurrentes se utilizan principalmente para datos secuenciales o temporales, y las redes de grafos serían especialmente útiles si los datos estuvieran formulados explícitamente como una red biológica (por ejemplo, una red regulatoria gen-gén), lo cual no corresponde con la representación proporcionada en esta práctica.
 
--   
+```         
+a)  Red de perceptrones (multiperceptron layers).
+```
 
+La arquitectura más adecuada para procesar datos de expresión génica en este caso sería una red de perceptrones multicapa (MLP), porque este tipo de datos se representa como una tabla de valores numéricos donde cada muestra es un vector de expresión (genes como variables). Es decir, no existe estructura espacial como en imágenes (donde tendría sentido una CNN), ni una dependencia temporal/secuencial clara como en textos o series temporales (donde se usarían RNN). Por ello, una MLP es el enfoque más natural y directo para aprender patrones complejos a partir de variables tabulares de alta dimensionalidad como los genes.
+
+```         
     b)  Redes convolucionales.
 
--   
+ 
 
     c)  Redes recurrentes.
 
--   
 
     d)  Redes de grafos.
+    
+```         

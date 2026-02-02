@@ -10,7 +10,7 @@ output:
     highlight: tango
 ---
 
-```{r setup, include=TRUE}
+```{r setup, include=TRUE, warning=FALSE, message=FALSE}
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 
 library(pheatmap)
@@ -25,8 +25,6 @@ library(plotly)
 library(uwot)
 library(ggplot2)
 library(randomForest)
-
-
 
 ```
 
@@ -137,8 +135,6 @@ variables_criticas <- zero_df %>%
 
 # Visualizar la tabla
 print(variables_criticas)
-
-
 
 ```
 
@@ -270,7 +266,7 @@ plot_ly(pca.df,
 
 ### 4.1.2 UMAP
 
-xxx
+Se ha implementado el algoritmo UMAP como técnica avanzada de reducción de dimensionalidad no lineal para proyectar los datos de expresión génica en un espacio bidimensional. Este método permite visualizar de forma clara y eficiente la agrupación de las muestras, preservando tanto la estructura local como las relaciones globales entre las diferentes tipologías celulares.
 
 ```{r UMAP, include=TRUE}
 
@@ -402,10 +398,9 @@ plot_ly(
 
 ### 4.2.2 HEATMAP
 
+Se ha implementado la clusterización jerárquica aglomerativa mediante una representación de Heatmap para explorar de forma bidimensional las relaciones de similitud entre muestras y genes. Este método permite organizar los datos en una estructura de árbol o dendrograma basada en el algoritmo de Ward, facilitando la identificación visual de patrones de co-expresión y firmas moleculares específicas que definen a cada grupo patológico.
+
 ```{r HEATMAP}
-
-
-
 # Calcular varianza de cada gen
 varianzas <- apply(x_filtrado, 2, var)
 
@@ -429,9 +424,6 @@ annotation_col <- data.frame(
 
 rownames(annotation_col) <- rownames(matriz_anova)
 
-
-
-
 colores_estilo_umap <- c("#F8766D", "#A3A000", "#00B0F6", "#00BF7D", "#E76BF3")
 
 # Colores para las clases
@@ -441,7 +433,6 @@ ann_colors <- list(
     unique(y) 
   )
 )
-
 
 # Heatmap con clustering jerárquico (método Ward)
 pheatmap(t(matriz_anova),  # Transponer: genes en filas, muestras en columnas
@@ -462,6 +453,8 @@ pheatmap(t(matriz_anova),  # Transponer: genes en filas, muestras en columnas
 
 ## 5.1 KNN
 
+La elección de k-NN responde a su robustez y simplicidad como clasificador no paramétrico, siendo una técnica ideal para establecer una línea base de comparación frente a modelos más complejos. Se seleccionó por su capacidad para realizar clasificaciones basadas en la proximidad local en el espacio multidimensional, lo cual resulta especialmente efectivo tras la reducción de dimensionalidad, permitiendo al algoritmo identificar con precisión la pertenencia a una clase basándose en la similitud directa entre los perfiles de expresión de las muestras vecinas.
+
 ```{r KNN}
 
 #IMPLEMENTACION DE KNN
@@ -472,7 +465,6 @@ pheatmap(t(matriz_anova),  # Transponer: genes en filas, muestras en columnas
 
 data_knn <- as.data.frame(X_scaled)
 data_knn$Class <- y
-
 
 
 # División en entrenamiento y test
@@ -489,9 +481,7 @@ train_data <- data_knn[train_index, ]
 test_data  <- data_knn[-train_index, ]
 
 
-
 # Entrenamiento del modelo KNN
-
 
 # Se utiliza validación cruzada (10-fold CV)
 # para seleccionar el valor óptimo de k
@@ -521,9 +511,7 @@ knn_model
 
 #El mejor valor de K que se ha obtenido ha sido o bien k = 9, k = 11, k = 13, pero caret elige 13 (primer máximo estable)
 
-
 # Evaluación del modelo
-
 
 # Predicciones sobre el conjunto de test
 pred_knn <- predict(knn_model, newdata = test_data)
@@ -533,7 +521,6 @@ cm <- confusionMatrix(pred_knn, test_data$Class)
 cm
 
 cm_df <- as.data.frame(cm$table)
-
 
 ggplot(cm_df, aes(x = Reference, y = Prediction, fill = Freq)) +
   geom_tile(color = "white") +
@@ -547,8 +534,9 @@ ggplot(cm_df, aes(x = Reference, y = Prediction, fill = Freq)) +
 
 ## 5.2 SVM
 
-```{r SVM}
+La implementación de SVM se justifica por su probada eficacia en escenarios de alta dimensionalidad y su capacidad para encontrar el hiperplano óptimo de separación entre clases complejas. Se seleccionó específicamente por su versatilidad al utilizar funciones de kernel (como el gaussiano o RBF), lo que permite al modelo capturar relaciones no lineales entre los niveles de expresión génica que otros clasificadores lineales omitirían. Además, su diseño orientado a la maximización del margen garantiza una excelente capacidad de generalización, reduciendo el riesgo de sobreajuste y permitiendo una clasificación precisa de las muestras patológicas incluso con fronteras de decisión solapadas.
 
+```{r SVM}
 
 # Preparar X (predictores) e y (clases)
 X <- data_final[, colnames(data_final) != "Class"]
@@ -638,8 +626,6 @@ f1_macro
 #matriz de confusión a data frame
 cm_df <- as.data.frame(cm$table)
 
-
-
 ggplot(cm_df, aes(x = Reference, y = Prediction, fill = Freq)) +
   geom_tile(color = "white") +
   geom_text(aes(label = Freq), size = 5) +
@@ -720,7 +706,6 @@ plot(importance, top = 20, main = "Top 20 genes mas importances")
 dev.off()
 cat("\nGrafico guardado en: random_forest_importance.pdf\n")
 
-
 #ANALISIS DE ERRORES
 ##Identificar muestras mal clasificadas
 errors <- which(predictions != test_data$Class)
@@ -740,7 +725,6 @@ if(length(errors) > 0 && length(errors) <= 10) {
 ```{r matriz_confucion_rf}
 
 cm_rf_df <- as.data.frame(conf_matrix$table)
-
 
 ggplot(cm_rf_df, aes(x = Reference, y = Prediction, fill = Freq)) +
   geom_tile(color = "white") +

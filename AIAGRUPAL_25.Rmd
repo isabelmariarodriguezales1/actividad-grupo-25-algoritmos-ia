@@ -638,6 +638,8 @@ ggplot(cm_df, aes(x = Reference, y = Prediction, fill = Freq)) +
 
 ## 5.3 RANDOM FOREST
 
+La elección de Random Forest se fundamenta en su capacidad para manejar la alta dimensionalidad y la complejidad no lineal de los datos de expresión génica mediante el uso de conjuntos de árboles de decisión (ensemble learning). Se seleccionó por su intrínseca robustez frente al sobreajuste y su habilidad para proporcionar una medida de la importancia de las variables, lo que permite identificar qué genes específicos contribuyen en mayor medida a la diferenciación de las clases. Además, al promediar múltiples estimaciones, este modelo ofrece una alta estabilidad y precisión en la clasificación, resultando especialmente eficaz para detectar patrones biológicos sutiles que podrían pasar desapercibidos para clasificadores individuales.
+
 ```{r RF}
 #APRENDIZAJE NO SUPERVISADO RANDOM FOREST
 
